@@ -1,0 +1,53 @@
+MATERIAL LIST:
+
+```
+
+1)ESP-32
+2)ESP-32 CAM
+3)SG09 (a micro servo motor)
+4)HC-SR04 (ultrasonic sensor)
+5)8 OMH 0.5 W audio (speaker)
+6)MP3-TF-16P
+7) two (2) RGB LED
+8)HW-095 module
+9)HC-SR04 (L298N)
+10)2.8 inch SPI TFT LCD Touchscreen
+11)4 set of TT Motor (with heels and motor)
+12)one 18650 battery holder
+13)two (2) 18650 battery
+
+```
+
+Sub materials/tools:
+
+```
+-wires
+-breadboard for prototype
+-a model to put the robot (perfboard or a stable material to make the car body)
+-soldering materials (if needed)
+
+```
+
+Material bill list:
+
+```
+
+1) ESP-32	RM 33.00
+2) ESP-32 CAM	RM 49.90
+3) SG90 Micro Servo Motor	RM 5.00
+4) HC-SR04 (Ultrasonic Sensor)	RM 3.30
+5) 8 Ohm 0.5W Speaker	RM 1.50
+6) MP3-TF-16P (DFPlayer Mini)	RM 8.00
+7) RGB LED (2 units)	RM 2.00
+8) HW-095 Module (L298N)	RM 6.30
+9) L298N Motor Driver	RM 9.90
+10) 2.8 inch SPI TFT LCD Touchscreen	RM 55.00
+11) 4x TT Motor (with wheels)	RM 20.00
+12) 18650 Battery Holder	RM 2.50
+13) 2x 18650 Battery	RM 30.00
+
+TOTAL:RM 220.65
+
+```
+
+
