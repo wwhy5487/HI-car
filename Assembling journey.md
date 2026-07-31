@@ -7,7 +7,7 @@ idea=a 4w mini car that is controllable via phone or tablet,and have some featur
 
 -the screen is a bit hard to make so i use a tiny oled as a prototype first.
 
-#HARWARE BUILD DAY (1): 29/7/2026
+# HARWARE BUILD DAY (1): 29/7/2026
 
 -assembled the ESP32 , 4 tt motor module, power (two 18650 battery) , HW-095 module for the motors, OLED screen.
 
@@ -61,6 +61,10 @@ the UI and the cam page:
 
 quite impressive,but the power draw is crazyyyy, the whole car reboots like every simgle time i push the motor to max limits,i maybe
 need a step up or an additional battery to keep it alive.
+
+next upgrade:audio functions.
+soon i will try soldering the first time
+hope i wont brn my hand
 
 
 
