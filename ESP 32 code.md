@@ -36,6 +36,22 @@ String currentText = "";
 // --- MP3-TF-16P audio module (UART2: GPIO16=RX2, GPIO17=TX2) ---
 HardwareSerial mp3Serial(2);
 
+// --- RGB Headlights (both LEDs wired in parallel off these 3 pins,
+// so they always show the same color at the same time) ---
+const int LED_R = 4;
+const int LED_G = 5;
+const int LED_B = 18;
+const int LED_FREQ = 5000;
+const int LED_RES = 8;
+
+#define LIGHT_OFF     0
+#define LIGHT_WHITE   1
+#define LIGHT_FLASH   2
+#define LIGHT_DISCO   3
+#define LIGHT_RAINBOW 4
+#define LIGHT_POLICE  5
+int lightState = LIGHT_OFF;
+
 // --- Expression / face states ---
 #define FACE_HAPPY     0
 #define FACE_ANGRY     1
@@ -77,11 +93,14 @@ void mp3SendCmd(uint8_t cmd, uint16_t param);
 void mp3Play(uint16_t track);
 void mp3SetVolume(uint8_t vol);
 void mp3Stop();
+void setRGB(uint8_t r, uint8_t g, uint8_t b);
+void updateLights();
+void hueToRGB(float hue, uint8_t &r, uint8_t &g, uint8_t &b);
 String urlDecode(String input);
 
 // --- Web Interface: split-screen layout for tablets ---
 // Top 50% = camera (always visible). Bottom 50% = every control at once,
-// laid out in columns (joystick | drive buttons | faces | sound/sliders).
+// laid out in columns (joystick | drive | faces | sound | lights).
 const char index_html_part1[] PROGMEM = R"rawliteral(
 <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <style>
@@ -90,7 +109,6 @@ const char index_html_part1[] PROGMEM = R"rawliteral(
 html,body { height:100%; margin:0; overflow:hidden; }
 body { font-family:'Segoe UI',Tahoma,sans-serif; background:var(--bg); color:#fff; display:flex; flex-direction:column; }
 
-/* ---- TOP HALF: camera ---- */
 #camPane { position:relative; height:50vh; background:#000; flex-shrink:0; }
 #camStream { width:100%; height:100%; object-fit:cover; display:block; }
 #camStatus { position:absolute; top:8px; right:10px; font-size:11px; padding:4px 10px; border-radius:20px; background:rgba(0,0,0,0.6); color:var(--muted); letter-spacing:1px; }
@@ -99,7 +117,6 @@ body { font-family:'Segoe UI',Tahoma,sans-serif; background:var(--bg); color:#ff
 #bigStop { position:absolute; bottom:10px; right:10px; background:var(--red); color:#000; border:none; font-weight:bold; font-size:14px; letter-spacing:1px; padding:12px 20px; border-radius:10px; box-shadow:0 0 14px rgba(255,51,102,0.6); }
 #bigStop:active { transform:scale(0.95); }
 
-/* ---- BOTTOM HALF: all controls, side by side ---- */
 #controls { height:50vh; display:flex; gap:6px; padding:8px; overflow-x:auto; overflow-y:hidden; }
 .col { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px; flex:1 1 0; min-width:150px; display:flex; flex-direction:column; overflow-y:auto; }
 .colTitle { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:6px; text-align:center; }
@@ -111,25 +128,23 @@ button:active { background:var(--neon); color:var(--bg); transform:scale(0.96); 
 .stopBtn { color:var(--red); border-color:var(--red); }
 .stopBtn:active { background:var(--red); color:var(--bg); }
 
-/* Joystick column */
 #joyPad { position:relative; width:150px; height:150px; margin:auto; border-radius:50%; background:#000; border:2px solid var(--neon); touch-action:none; flex-shrink:0; }
 #joyStick { position:absolute; width:50px; height:50px; border-radius:50%; background:var(--neon); left:50px; top:50px; }
 
-/* Drive buttons column */
 .driveGrid { display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:6px; flex:1; }
 .driveGrid button { font-size:12px; padding:0; }
-.driveGrid .full { grid-column:1/-1; }
 
-/* Face column */
 .faceGrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
 .faceGrid button { font-size:11px; padding:10px 0; }
 #txt { width:100%; padding:8px; background:#000; border:1px solid #333; color:var(--neon); border-radius:6px; margin:6px 0; font-size:12px; }
 
-/* Sound/sliders column */
 .soundGrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px; }
-.soundGrid button { font-size:11px; padding:10px 0; }
+.soundGrid button { font-size:11px; padding:9px 0; }
 .sliderRow { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:6px 0 2px; }
 input[type=range] { width:100%; accent-color:var(--neon); }
+
+.lightGrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.lightGrid button { font-size:11px; padding:10px 0; }
 </style>
 </head><body>
 
@@ -185,10 +200,25 @@ input[type=range] { width:100%; accent-color:var(--neon); }
       <button class="gold" onclick="sendCmd('SOUND=1')">Horn</button>
       <button class="gold" onclick="sendCmd('SOUND=2')">Siren</button>
       <button class="gold" onclick="sendCmd('SOUND=3')">Laugh</button>
-      <button class="stopBtn" onclick="sendCmd('SOUND_STOP')">Mute</button>
+      <button class="gold" onclick="sendCmd('SOUND=4')">Wow</button>
+      <button class="gold" onclick="sendCmd('SOUND=5')">Alarm</button>
+      <button class="gold" onclick="sendCmd('SOUND=6')">Boing</button>
     </div>
+    <button class="stopBtn" style="width:100%; padding:8px 0; margin-bottom:6px;" onclick="sendCmd('SOUND_STOP')">Mute</button>
     <div class="sliderRow"><span>Volume</span><span id="volVal">20</span></div>
     <input type="range" min="0" max="30" value="20" oninput="updateVol(this.value)">
+  </div>
+
+  <div class="col">
+    <div class="colTitle">Headlights</div>
+    <div class="lightGrid">
+      <button class="gold" onclick="sendCmd('LIGHT=1')">White</button>
+      <button class="gold" onclick="sendCmd('LIGHT=2')">Flash</button>
+      <button class="gold" onclick="sendCmd('LIGHT=3')">Disco</button>
+      <button class="gold" onclick="sendCmd('LIGHT=4')">Rainbow</button>
+      <button class="gold" onclick="sendCmd('LIGHT=5')">Police</button>
+      <button class="stopBtn" onclick="sendCmd('LIGHT=0')">Off</button>
+    </div>
   </div>
 
 </div>
@@ -203,7 +233,6 @@ const char index_html_part2[] PROGMEM = R"rawliteral(";
   function updateVol(v) { document.getElementById('volVal').innerText = v; fetch('/VOL=' + v); }
   function sendText() { let t = document.getElementById('txt').value; fetch('/TEXT=' + encodeURIComponent(t)); }
 
-  // --- Camera: snapshot polling (works on every browser, incl. iOS Safari) ---
   const camImg = document.getElementById('camStream');
   const camStatus = document.getElementById('camStatus');
   let camPending = false;
@@ -228,7 +257,6 @@ const char index_html_part2[] PROGMEM = R"rawliteral(";
   setInterval(refreshCam, 200);
   refreshCam();
 
-  // --- Joystick ---
   (function() {
     const pad = document.getElementById('joyPad');
     const stick = document.getElementById('joyStick');
@@ -300,6 +328,11 @@ void setup() {
   ledcAttach(IN4, freq, resolution);
   stopRobot();
 
+  ledcAttach(LED_R, LED_FREQ, LED_RES);
+  ledcAttach(LED_G, LED_FREQ, LED_RES);
+  ledcAttach(LED_B, LED_FREQ, LED_RES);
+  setRGB(0, 0, 0);
+
   mp3Serial.begin(9600, SERIAL_8N1, 16, 17);
   delay(500);
   mp3SetVolume(20);
@@ -347,6 +380,8 @@ void loop() {
     case FACE_COOL:      drawCoolFace(); break;
     case FACE_SURPRISED: drawSurprisedFace(); break;
   }
+
+  updateLights();
 
   WiFiClient client = server.available();
   if (!client) return;
@@ -433,6 +468,12 @@ void loop() {
     while (endIdx < (int)request.length() && isDigit(request.charAt(endIdx))) endIdx++;
     int vol = constrain(request.substring(idx, endIdx).toInt(), 0, 30);
     mp3SetVolume(vol);
+  } else if (request.indexOf("/LIGHT=") != -1) {
+    int idx = request.indexOf("/LIGHT=") + 7;
+    int endIdx = idx;
+    while (endIdx < (int)request.length() && isDigit(request.charAt(endIdx))) endIdx++;
+    int mode = constrain(request.substring(idx, endIdx).toInt(), 0, 5);
+    lightState = mode;
   } else {
     isCommand = false;
   }
@@ -651,6 +692,76 @@ void mp3SetVolume(uint8_t vol)   { mp3SendCmd(0x06, vol); }
 void mp3Stop()                   { mp3SendCmd(0x16, 0); }
 
 // ==========================================
+// RGB HEADLIGHTS
+// ==========================================
+void setRGB(uint8_t r, uint8_t g, uint8_t b) {
+  ledcWrite(LED_R, r);
+  ledcWrite(LED_G, g);
+  ledcWrite(LED_B, b);
+}
+
+// Standard hue (0-359) to RGB (0-255) conversion, full saturation/brightness.
+void hueToRGB(float hue, uint8_t &r, uint8_t &g, uint8_t &b) {
+  float c = 255.0;
+  float x = c * (1.0 - fabs(fmod(hue / 60.0, 2.0) - 1.0));
+  float rf, gf, bf;
+  if      (hue < 60)  { rf = c; gf = x; bf = 0; }
+  else if (hue < 120) { rf = x; gf = c; bf = 0; }
+  else if (hue < 180) { rf = 0; gf = c; bf = x; }
+  else if (hue < 240) { rf = 0; gf = x; bf = c; }
+  else if (hue < 300) { rf = x; gf = 0; bf = c; }
+  else                { rf = c; gf = 0; bf = x; }
+  r = (uint8_t)rf; g = (uint8_t)gf; b = (uint8_t)bf;
+}
+
+// Called every loop() - non-blocking, timing driven by millis()
+void updateLights() {
+  switch (lightState) {
+    case LIGHT_OFF:
+      setRGB(0, 0, 0);
+      break;
+
+    case LIGHT_WHITE:
+      setRGB(255, 255, 255);
+      break;
+
+    case LIGHT_FLASH: {
+      bool on = (millis() / 400) % 2 == 0;
+      setRGB(on ? 255 : 0, on ? 255 : 0, on ? 255 : 0);
+      break;
+    }
+
+    case LIGHT_DISCO: {
+      int idx = (millis() / 150) % 6;
+      switch (idx) {
+        case 0: setRGB(255, 0, 0);   break;
+        case 1: setRGB(0, 255, 0);   break;
+        case 2: setRGB(0, 0, 255);   break;
+        case 3: setRGB(255, 255, 0); break;
+        case 4: setRGB(0, 255, 255); break;
+        case 5: setRGB(255, 0, 255); break;
+      }
+      break;
+    }
+
+    case LIGHT_RAINBOW: {
+      float hue = (float)((millis() / 15) % 360);
+      uint8_t r, g, b;
+      hueToRGB(hue, r, g, b);
+      setRGB(r, g, b);
+      break;
+    }
+
+    case LIGHT_POLICE: {
+      bool redPhase = (millis() / 180) % 2 == 0;
+      if (redPhase) setRGB(255, 0, 0);
+      else          setRGB(0, 0, 255);
+      break;
+    }
+  }
+}
+
+// ==========================================
 // HELPERS
 // ==========================================
 String urlDecode(String input) {
@@ -672,6 +783,7 @@ String urlDecode(String input) {
   }
   return decoded;
 }
+
 ```
 
 
